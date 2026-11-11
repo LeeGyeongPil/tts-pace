@@ -34,11 +34,20 @@ def _add_text(p: argparse.ArgumentParser, required: bool = True) -> None:
     g.add_argument("--text-file", help="file containing the spoken text (UTF-8)")
 
 
+def _add_target(p: argparse.ArgumentParser) -> None:
+    g = p.add_mutually_exclusive_group(required=True)
+    g.add_argument("--target", type=float, help="target syllables per second")
+    g.add_argument("--target-duration", type=float, metavar="SECONDS",
+                   help="target total length in seconds, pauses included")
+
+
 def _print_result(r: FitResult, out: str | None) -> None:
     print(f"base      {r.base.measurement.sps:.2f} sps")
     for c in r.candidates[1:]:
         print(f"{c.kind:<13} speed x{c.speed:.3f}  tempo x{c.tempo:.3f}  -> {c.measurement.sps:.2f} sps  err {c.err_pct:.2f}%")
     print(f"best      {r.route}: {r.best.measurement.sps:.2f} sps (target {r.target_sps:g}, err {r.best.err_pct:.2f}%)")
+    if r.target_duration is not None:  # length mode only
+        print(f"length    {r.best.measurement.total_s:.2f}s (target {r.target_duration:.2f}s, err {r.length_err_pct:.2f}%)")
     print(f"cache     {'hit' if r.cache_hit else 'miss'}")
     if out:
         print(f"wrote     {out}")
@@ -79,7 +88,7 @@ def cmd_measure(args: argparse.Namespace) -> int:
 
 
 def cmd_retime(args: argparse.Namespace) -> int:
-    r = fit_audio(args.wav, _text_arg(args), args.target, out=args.out)
+    r = fit_audio(args.wav, _text_arg(args), args.target, out=args.out, target_duration=args.target_duration)
     if args.json:
         print(json.dumps(r.report(), ensure_ascii=False))
     else:
@@ -101,7 +110,7 @@ def cmd_fit(args: argparse.Namespace) -> int:
     else:
         engine = PiperEngine(args.voice)
     cache_dir = args.cache_dir if args.cache_dir else (False if args.no_cache else default_cache_dir())
-    r = fit(text, args.target, engine, out=args.out, cache_dir=cache_dir)
+    r = fit(text, args.target, engine, out=args.out, cache_dir=cache_dir, target_duration=args.target_duration)
     _print_result(r, args.out)
     if args.report:
         r.save_report(args.report)
@@ -136,7 +145,7 @@ def build_parser() -> argparse.ArgumentParser:
     r = sub.add_parser("retime", help="change an existing recording's tempo toward a target rate (0.85-1.15 limit)")
     r.add_argument("wav")
     _add_text(r)
-    r.add_argument("--target", type=float, required=True, help="target syllables per second")
+    _add_target(r)
     r.add_argument("-o", "--out", required=True)
     r.add_argument("--json", action="store_true")
     r.set_defaults(func=cmd_retime)
@@ -144,7 +153,7 @@ def build_parser() -> argparse.ArgumentParser:
     f = sub.add_parser("fit", help="synthesize with an engine and fit to a target rate")
     f.add_argument("--engine", choices=["mock", "say", "piper"], default="mock")
     _add_text(f)
-    f.add_argument("--target", type=float, required=True, help="target syllables per second")
+    _add_target(f)
     f.add_argument("-o", "--out", required=True)
     f.add_argument("--voice", help="say voice name, or Piper .onnx path")
     f.add_argument("--lang", choices=["ko", "en"], help="mock engine preset (default: guessed from the text)")

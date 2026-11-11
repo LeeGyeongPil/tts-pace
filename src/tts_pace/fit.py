@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
@@ -74,6 +75,7 @@ class FitResult:
     advice: tuple[str, ...]
     cache_hit: bool = False
     cache_key: str | None = None
+    target_duration: float | None = None  # seconds of total length (pauses included); None = sps mode
 
     @property
     def route(self) -> str:
@@ -81,7 +83,7 @@ class FitResult:
         return self.best.kind
 
     def report(self) -> dict[str, object]:
-        return {
+        rep: dict[str, object] = {
             "version": 1,
             "engine": self.engine,
             "mock": self.mock,
@@ -97,6 +99,18 @@ class FitResult:
             "cache_hit": self.cache_hit,
             "cache_key": self.cache_key,
         }
+        if self.target_duration is not None:  # length mode only: sps-mode reports keep their old keys
+            rep["target_duration"] = self.target_duration
+            rep["result_total_s"] = round(self.best.measurement.total_s, 4)
+            rep["length_err_pct"] = round(self.length_err_pct, 3)
+        return rep
+
+    @property
+    def length_err_pct(self) -> float:
+        """Distance of the best candidate's total length from target_duration, in percent (length mode only)."""
+        if self.target_duration is None:
+            raise ValueError("length_err_pct is only available when target_duration was given")
+        return _err(self.best.measurement.total_s, self.target_duration)
 
     @classmethod
     def from_report(cls, r: Mapping[str, object], *, cache_hit: bool = False, best_path: str | None = None) -> FitResult:
@@ -109,7 +123,8 @@ class FitResult:
         syl = SyllableCount(int(s["total"]), dict(s["by_script"]), str(s["normalized_text"]), tuple(s["unsupported"]))  # type: ignore[index]
         return cls(float(r["target_sps"]), str(r["engine"]), bool(r["mock"]), syl, cands[0], cands, best,  # type: ignore[arg-type]
                    float(r["first_ratio"]), tuple(r["warnings"]), tuple(r["advice"]),  # type: ignore[arg-type]
-                   cache_hit, r.get("cache_key"))  # type: ignore[arg-type]
+                   cache_hit, r.get("cache_key"),  # type: ignore[arg-type]
+                   None if r.get("target_duration") is None else float(r["target_duration"]))  # type: ignore[arg-type]
 
     def save_report(self, path: str | Path) -> Path:
         p = Path(path)
@@ -122,8 +137,18 @@ def _err(sps: float, target: float) -> float:
     return abs(sps - target) / target * 100.0
 
 
-def _validate(target_sps: float, tolerance: float, tempo_range: tuple[float, float]) -> None:
-    if not target_sps > 0:
+def _validate(target_sps: float | None, target_duration: float | None, tolerance: float,
+              tempo_range: tuple[float, float]) -> None:
+    if target_sps is not None and target_duration is not None:
+        raise ValueError("give either target_sps or target_duration, not both")
+    if target_sps is None and target_duration is None:
+        raise ValueError("give target_sps (syllables/second) or target_duration (seconds)")
+    if target_duration is not None:
+        # Rejects 0, negatives, NaN and inf (math.isfinite is False for the last two).
+        if not (isinstance(target_duration, (int, float)) and math.isfinite(target_duration) and target_duration > 0):
+            raise ValueError("target_duration must be a positive number of seconds "
+                             f"(total length including pauses, e.g. 4.0), got {target_duration!r}")
+    elif not target_sps > 0:  # type: ignore[operator]
         raise ValueError(f"target_sps must be positive (syllables per second, e.g. 5.0), got {target_sps!r}")
     if not 0 <= tolerance < 1:
         raise ValueError(f"tolerance must be in [0, 1), e.g. 0.10 for 10%, got {tolerance!r}")
@@ -135,7 +160,8 @@ def _validate(target_sps: float, tolerance: float, tempo_range: tuple[float, flo
 def _loop(
     *,
     count: SyllableCount,
-    target: float,
+    target: float | None,
+    target_duration: float | None = None,
     base_clip: AudioClip,
     resynth: Callable[[float], AudioClip] | None,
     speed_range: tuple[float, float],
@@ -163,6 +189,11 @@ def _loop(
 
     m0 = meas(base_clip)
     assert m0.sps is not None
+    if target_duration is not None:
+        # Length mode: convert to a pure-speech rate assuming the pause share stays the same
+        # (a tempo change scales speech and pauses together).
+        target = count.total * m0.total_s / (m0.net_s * target_duration)
+    assert target is not None
     base = Candidate("base", None, 1.0, 1.0, m0, _err(m0.sps, target))
     cands.append(base)
     clips["base"] = base_clip
@@ -190,6 +221,9 @@ def _loop(
 
     assert cur_m.sps is not None
     remaining = target / cur_m.sps
+    if target_duration is not None:
+        # Re-synthesis can change the pauses, so aim the tempo at the current clip's real total length.
+        remaining = cur_m.total_s / target_duration
     if abs(remaining - 1.0) > MIN_TEMPO_DELTA:
         factor, clamped = clamp_factor(remaining, tempo_range)
         if clamped:
@@ -201,11 +235,14 @@ def _loop(
         cands.append(Candidate(kind_with_tempo, None, speed, factor, m2, _err(m2.sps, target)))
         clips[kind_with_tempo] = out_clip
 
-    best = min(cands, key=lambda c: c.err_pct)
+    if target_duration is not None:
+        best = min(cands, key=lambda c: _err(c.measurement.total_s, target_duration))
+    else:
+        best = min(cands, key=lambda c: c.err_pct)
     warns = list(dict.fromkeys(warns))
     advice = tuple(ADVICE[w] for w in warns)
     result = FitResult(target, engine_name, mock, count, base, tuple(cands), best, first_ratio,
-                       tuple(warns), advice)
+                       tuple(warns), advice, target_duration=target_duration)
     return result, clips
 
 
@@ -232,10 +269,11 @@ def _finish(result: FitResult, clips: dict[str, AudioClip], out: str | Path | No
 
 def fit(
     text: str,
-    target_sps: float,
+    target_sps: float | None,
     engine: SpeedEngine,
     out: str | Path | None = None,
     *,
+    target_duration: float | None = None,
     tolerance: float = 0.10,
     tempo_range: tuple[float, float] = DEFAULT_TEMPO_RANGE,
     silence_db: float = -60.0,
@@ -250,6 +288,10 @@ def fit(
 ) -> FitResult:
     """Make ``engine`` speak ``text`` at ``target_sps`` syllables per second of pure speech.
 
+    Instead of ``target_sps`` you can pass ``target_duration`` (seconds): the total length of the
+    output WAV, pauses included (give ``None`` for target_sps then). Exactly one of the two is required.
+    A length outside what the tempo range can reach stops at the limit with a ``tempo_clamped`` warning.
+
     Steps: synthesize at the default speed, measure, then either only apply a tempo change
     (when within ``tolerance`` of the target, or the engine has no speed knob) or re-synthesize
     once with speed x ratio and finish with a tempo change limited to ``tempo_range``.
@@ -258,7 +300,7 @@ def fit(
     cache; False = never cache). ``out``: where to write the best WAV.
     Raises ValueError for bad arguments, UnsupportedTextError, MeasurementError, EngineError, BusyError.
     """
-    _validate(target_sps, tolerance, tempo_range)
+    _validate(target_sps, target_duration, tolerance, tempo_range)
     lim = limiter or DEFAULT_LIMITER
     count = count_syllables(text, lang, normalize)
     info = engine.info
@@ -274,13 +316,16 @@ def fit(
             cache = ResultCache(default_cache_dir())
 
     def key_for(base_id: str) -> str:
-        return make_key({
+        parts: dict[str, object] = {
             "engine": info.cache_id, "text": text, "lang": lang, "normalize": dict(normalize or {}),
             "target": target_sps, "tolerance": tolerance, "tempo_range": list(tempo_range),
             "silence_db": silence_db, "min_silence": min_silence, "tempo": tempo_used,
             "measure": "ffmpeg" if measure_backend == "ffmpeg" else "numpy",
             "speed_range": list(info.speed_range), "knob": info.has_speed_knob, "base": base_id,
-        })
+        }
+        if target_duration is not None:  # only length mode adds a key, so sps-mode keys stay unchanged
+            parts["target_duration"] = target_duration
+        return make_key(parts)
 
     def from_cache(key: str) -> FitResult | None:
         assert cache is not None
@@ -316,7 +361,7 @@ def fit(
                 return engine.synthesize(text, speed)
 
         result, clips = _loop(
-            count=count, target=target_sps, base_clip=base_clip,
+            count=count, target=target_sps, target_duration=target_duration, base_clip=base_clip,
             resynth=resynth if info.has_speed_knob else None, speed_range=info.speed_range,
             engine_name=info.name, mock=info.is_mock, tolerance=tolerance, tempo_range=tempo_range,
             silence_db=silence_db, min_silence=min_silence, tempo_backend=tempo_backend,
@@ -331,9 +376,10 @@ def fit(
 def fit_audio(
     audio: str | Path | AudioClip,
     text: str,
-    target_sps: float,
+    target_sps: float | None,
     out: str | Path | None = None,
     *,
+    target_duration: float | None = None,
     tolerance: float = 0.10,
     tempo_range: tuple[float, float] = DEFAULT_TEMPO_RANGE,
     silence_db: float = -60.0,
@@ -344,12 +390,15 @@ def fit_audio(
     lang: str = "auto",
     normalize: Mapping[str, str] | None = None,
 ) -> FitResult:
-    """Fit an existing recording with the tempo change only (no engine). Same result type as fit()."""
-    _validate(target_sps, tolerance, tempo_range)
+    """Fit an existing recording with the tempo change only (no engine). Same result type as fit().
+
+    Give exactly one of ``target_sps`` or ``target_duration`` (total seconds, pauses included).
+    """
+    _validate(target_sps, target_duration, tolerance, tempo_range)
     count = count_syllables(text, lang, normalize)
     clip = audio if isinstance(audio, AudioClip) else AudioClip.from_wav(audio)
     result, clips = _loop(
-        count=count, target=target_sps, base_clip=clip, resynth=None, speed_range=(1.0, 1.0),
+        count=count, target=target_sps, target_duration=target_duration, base_clip=clip, resynth=None, speed_range=(1.0, 1.0),
         engine_name="file", mock=False, tolerance=tolerance, tempo_range=tempo_range,
         silence_db=silence_db, min_silence=min_silence, tempo_backend=tempo_backend,
         measure_backend=measure_backend, limiter=limiter or DEFAULT_LIMITER,
