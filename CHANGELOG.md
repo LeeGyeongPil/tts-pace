@@ -4,6 +4,19 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - 2026-11-11
+
+### Added
+- `tts-pace fit --json` prints the report JSON (same structure as `retime --json`) to stdout as a single line.
+  The practice-mode `[mock]` notice and warnings go to stderr; errors still exit 2 with an empty stdout.
+
+### Known issues
+- Tests for `--json` do not yet cover `--lang` or `--target-duration` with `--cache-dir`.
+- On a `--json` error in mock mode, the first stderr line is the `[mock]` notice, followed by the `error:` line (stdout stays empty, exit 2).
+
+### Unchanged
+- Without `--json`, output, reports and exit codes are identical to 0.2.0.
+
 ## [0.2.0] - 2026-11-11
 
 ### Added

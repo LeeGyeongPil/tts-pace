@@ -186,6 +186,19 @@ wrote     o.wav
 
 `best` 줄의 `target 3.2864`는 목표 길이 4초를 이 문장의 쉼 제외 말속도로 환산한 목표 sps입니다(그래서 다른 줄과 소수점 자릿수가 다릅니다).
 
+스크립트에서 쓰려면 `--json`을 붙입니다(0.3.0부터). 표준출력에는 보고서 JSON 한 줄만 나오고, 경고와 `[mock]` 안내는 표준오류로 갑니다. `--report` 파일에 저장되는 내용과 같습니다.
+
+```bash
+uv run tts-pace fit --engine mock --text "Today we learn pace." \
+  --target 4 -o o.wav --no-cache --json 2>/dev/null
+```
+
+```text
+{"version": 1, "engine": "mock-en", "mock": true, "mock_note": "practice (mock) engine, not a real TTS", "target_sps": 4.0, ...
+```
+
+(출력 앞부분만 적었습니다. 뒤에는 `syllables`, `route`, `best`, `candidates`, `warnings`, `cache_hit` 등이 이어집니다.)
+
 캐시 기본값은 CLI와 라이브러리가 다릅니다. CLI는 기본으로 `~/.cache/tts-pace`에 캐시하고, 라이브러리 `fit()`은 `cache_dir`를 주지 않으면(환경 변수 `TTS_PACE_CACHE_DIR`도 없으면) 캐시하지 않습니다.
 
 같은 명령에서 `--no-cache` 대신 `--cache-dir "$HOME/.cache/tts-pace"`(기본 캐시 위치는 `~/.cache/tts-pace`, `TTS_PACE_CACHE_DIR`로 바꿈)를 쓰면 두 번째 실행부터 `cache     hit`이 나오고 합성을 건너뜁니다.
@@ -211,7 +224,7 @@ cache     miss
 wrote     slower.wav
 ```
 
-엔진 없이 파일만 있을 때 쓰는 명령입니다. 목표가 너무 멀면(예: `--target 2.0`) 0.85배 하한에서 멈추고 `tempo_clamped` 경고를 냅니다. 이때도 종료 코드는 0이므로, 자동화에서는 경고 여부를 `--json` 출력이나 보고서로 확인하세요.
+엔진 없이 파일만 있을 때 쓰는 명령입니다. 목표가 너무 멀면(예: `--target 2.0`) 0.85배 하한에서 멈추고 `tempo_clamped` 경고를 냅니다. 이때도 종료 코드는 0이므로, 자동화에서는 경고 여부를 `--json` 출력(`retime --json`, `fit --json` 모두)의 `warnings` 필드나 보고서로 확인하세요.
 
 ## API
 
@@ -323,7 +336,7 @@ r = fit("오늘은 속도를 맞춥니다.", target_sps=4.5, engine=SayEngine("Y
 - 영어 음절은 규칙 기반 추정입니다(CMUdict 단어 1994개 표본에서 단어 단위 일치율 89.6%). 한국어는 글자 블록, 일본어는 모라 단위로 셉니다.
 - 템포 변환은 0.85~1.15배로 제한됩니다. 그 밖의 차이는 노브나 문장 길이로 풀어야 합니다.
 - `--target-duration`의 길이는 쉼을 포함한 전체 길이이고, 필요한 템포가 0.85~1.15배 안일 때만 정확히 맞습니다. 그 밖이면 경고와 함께 가까운 곳에서 멈춥니다.
-- 알려진 한계(0.2.0): `--target-duration`에 0 이하 값을 주면 `error:` 줄 뒤에 목 엔진 안내 줄이 함께 찍힙니다(종료 코드는 2로 정상). 길이 모드의 일부 테스트는 값 단위 검증이 약해 이후 보강할 예정입니다.
+- 알려진 한계(0.3.0 기준): `--target-duration`에 0 이하 값을 주면 `error:` 줄 뒤에 목 엔진 안내 줄이 함께 찍힙니다(종료 코드는 2로 정상). 길이 모드의 일부 테스트는 값 단위 검증이 약해 이후 보강할 예정입니다. `--json` 테스트에는 `--lang`, `--target-duration`+`--cache-dir` 조합이 아직 없습니다. `--json`에서 오류가 나면(목 모드) 표준오류 첫 줄은 `[mock]` 안내이고 `error:` 줄은 그다음에 옵니다(표준출력은 비어 있고 종료 코드는 2).
 - 목 엔진은 측정·보정 로직을 연습하기 위한 것이며 실제 음성의 품질과 속도 특성을 대표하지 않습니다.
 
 ## 버전·호환성
@@ -345,7 +358,7 @@ r = fit("오늘은 속도를 맞춥니다.", target_sps=4.5, engine=SayEngine("Y
 
 ```bash
 uv sync
-uv run pytest -q   # 91 passed, 2 deselected (실제 엔진이 필요한 테스트는 기본에서 제외)
+uv run pytest -q   # 99 passed, 2 deselected (실제 엔진이 필요한 테스트는 기본에서 제외)
 ```
 
 ## 더 알아보기
