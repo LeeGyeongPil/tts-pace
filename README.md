@@ -1,5 +1,7 @@
 # tts-pace
 
+**한국어** | [English](README.en.md)
+
 > **English summary** — A small Python library and CLI that measures the speaking rate of speech audio (syllables per second of *pure speech*, silences excluded) and fits a TTS engine's output to a target pace: first with the engine's own speed knob, then with a bounded, pitch-preserving tempo change. You can also give a target total length in seconds (`--target-duration`) instead of a pace. One runtime dependency (numpy), no API key, and a practice (mock) engine so you can try everything offline. Install: `uv add git+https://github.com/LeeGyeongPil/tts-pace`.
 
 TTS 음성이 "초당 몇 음절" 속도로 말하는지 재고, 목표 속도에 맞춰 주는 파이썬 라이브러리 겸 명령줄 도구입니다. 영상 더빙·내레이션·낭독처럼 "이 문장은 4초 안에 끝나야 한다" 같은 요구가 있을 때 씁니다.
