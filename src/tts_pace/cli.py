@@ -104,13 +104,21 @@ def cmd_fit(args: argparse.Namespace) -> int:
     if args.engine == "mock":
         preset = args.lang or ("ko" if any("가" <= ch <= "힣" for ch in text) else "en")
         engine = MockEngine(preset)
-        print(MOCK_BANNER)
+        # With --json stdout must hold the JSON only, so the practice-mode notice goes to stderr.
+        print(MOCK_BANNER, file=sys.stderr if args.json else sys.stdout)
     elif args.engine == "say":
         engine = SayEngine(args.voice)
     else:
         engine = PiperEngine(args.voice)
     cache_dir = args.cache_dir if args.cache_dir else (False if args.no_cache else default_cache_dir())
     r = fit(text, args.target, engine, out=args.out, cache_dir=cache_dir, target_duration=args.target_duration)
+    if args.json:
+        print(json.dumps(r.report(), ensure_ascii=False))
+        for w, a in zip(r.warnings, r.advice):
+            print(f"warning: {w} - {a}", file=sys.stderr)
+        if args.report:
+            r.save_report(args.report)
+        return 0
     _print_result(r, args.out)
     if args.report:
         r.save_report(args.report)
@@ -160,6 +168,7 @@ def build_parser() -> argparse.ArgumentParser:
     f.add_argument("--cache-dir", help=f"result cache folder (default: {default_cache_dir()})")
     f.add_argument("--no-cache", action="store_true")
     f.add_argument("--report", help="write the report JSON here")
+    f.add_argument("--json", action="store_true", help="print the report JSON to stdout (notices go to stderr)")
     f.set_defaults(func=cmd_fit)
     return p
 
