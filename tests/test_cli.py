@@ -98,3 +98,95 @@ def test_non_audio_file_error_says_how_to_fix(tmp_path, capsys):
     err = capsys.readouterr().err
     assert err.startswith("error:") and "16-bit WAV" in err
     assert find_ffmpeg() is None or "not an audio file ffmpeg can read" in err
+
+
+# --- fit --json -------------------------------------------------------------------------------
+
+ROUTES = {"base", "tempo-only", "resynth", "resynth+tempo"}
+
+
+def fit_args(tmp_path, *extra):
+    return ["fit", "--engine", "mock", "--text", EN, "-o", str(tmp_path / "o.wav"), "--no-cache", *extra]
+
+
+def test_fit_json_sps_mode_stdout_is_one_json_and_banner_goes_to_stderr(tmp_path, capsys):
+    assert main(fit_args(tmp_path, "--target", "4.0", "--json")) == 0
+    cap = capsys.readouterr()
+    assert "[mock]" not in cap.out and cap.out.count("\n") == 1
+    assert "[mock]" in cap.err
+    data = json.loads(cap.out)
+    assert data["version"] == 1 and data["mock"] is True and isinstance(data["mock_note"], str)
+    assert data["target_sps"] == 4.0 and data["route"] in ROUTES
+    assert isinstance(data["best"], int) and isinstance(data["cache_hit"], bool)
+    assert isinstance(data["warnings"], list) and isinstance(data["advice"], list)
+    cand = data["candidates"][data["best"]]
+    assert abs(cand["measurement"]["sps"] - 4.0) < 0.3 and isinstance(cand["err_pct"], float)
+    assert isinstance(cand["speed"], float) and isinstance(cand["tempo"], float)
+    assert "target_duration" not in data and "result_total_s" not in data
+
+
+def test_fit_json_target_duration_mode(tmp_path, capsys):
+    assert main(fit_args(tmp_path, "--target-duration", "6", "--json")) == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["target_duration"] == 6.0
+    assert isinstance(data["result_total_s"], float) and 0 < data["result_total_s"] < 20
+    assert isinstance(data["length_err_pct"], float) and 0 <= data["length_err_pct"] < 100
+    assert data["route"] in ROUTES
+
+
+def test_fit_json_warning_branch_keeps_exit_0_and_stderr_warning(tmp_path, capsys):
+    assert main(fit_args(tmp_path, "--target", "9", "--json")) == 0
+    cap = capsys.readouterr()
+    data = json.loads(cap.out)
+    assert "tempo_clamped" in data["warnings"] and "warning: tempo_clamped" in cap.err
+    assert data["route"] != "base"
+
+
+def test_fit_json_cache_branch(tmp_path, capsys):
+    args = fit_args(tmp_path, "--target", "4.0", "--json")
+    args.remove("--no-cache")
+    args += ["--cache-dir", str(tmp_path / "c")]
+    assert main(args) == 0
+    first = json.loads(capsys.readouterr().out)
+    assert main(args) == 0
+    second = json.loads(capsys.readouterr().out)
+    assert first["cache_hit"] is False and second["cache_hit"] is True
+    assert isinstance(second["cache_key"], str)
+
+
+def test_fit_json_with_report_file_matches_stdout(tmp_path, capsys):
+    rep = tmp_path / "r.json"
+    assert main(fit_args(tmp_path, "--target", "4.0", "--json", "--report", str(rep))) == 0
+    out = capsys.readouterr().out
+    assert json.loads(out) == json.loads(rep.read_text(encoding="utf-8"))
+
+
+def test_fit_json_error_branch_leaves_stdout_empty(tmp_path, capsys):
+    assert main(["fit", "--engine", "mock", "--text", "", "--target", "4", "-o", str(tmp_path / "o.wav"),
+                 "--no-cache", "--json"]) == 2
+    cap = capsys.readouterr()
+    assert cap.out == "" and "error:" in cap.err
+    assert main(fit_args(tmp_path, "--target-duration", "0", "--json")) == 2
+    cap = capsys.readouterr()
+    assert cap.out == "" and "error:" in cap.err
+
+
+def test_fit_help_lists_json(capsys):
+    import pytest
+
+    with pytest.raises(SystemExit):
+        main(["fit", "--help"])
+    assert "--json" in capsys.readouterr().out
+
+
+def test_fit_without_json_output_lines_unchanged(tmp_path, capsys):
+    assert main(fit_args(tmp_path, "--target", "4.0")) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0].startswith("[mock]")
+    assert [ln.split()[0] for ln in lines[1:2]] == ["base"]
+    assert [ln.split()[0] for ln in lines if ln.startswith(("best", "cache", "wrote"))] == ["best", "cache", "wrote"]
+    assert not any(ln.startswith(("length", "report")) for ln in lines)
+    assert main(fit_args(tmp_path, "--target-duration", "6")) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert [ln.split()[0] for ln in lines if ln.startswith(("best", "length", "cache", "wrote"))] == [
+        "best", "length", "cache", "wrote"]
