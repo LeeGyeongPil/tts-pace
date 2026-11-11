@@ -21,7 +21,7 @@ from .measure import Measurement, measure
 from .runtime import Limiter
 from .tempo import retime
 
-__version__ = "0.1.1"
+__version__ = "0.2.0"
 
 __all__ = [
     "AudioClip", "AudioFormatError", "BusyError", "CallableEngine", "Candidate", "EngineError",
