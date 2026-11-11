@@ -1,6 +1,6 @@
 [project]
 name = "tts-pace"
-version = "0.2.0"
+version = "0.3.0"
 description = "Measure speaking rate (syllables per second of pure speech) and fit TTS output to a target pace: engine knob re-synthesis plus a bounded, pitch-preserving tempo change."
 readme = "README.md"
 requires-python = ">=3.12"
