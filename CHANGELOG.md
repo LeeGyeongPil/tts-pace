@@ -4,6 +4,21 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] - 2026-11-11
+
+### Added
+- `target_duration` (seconds, total length including pauses) for `fit()` and `fit_audio()`, and
+  `--target-duration SECONDS` for `tts-pace fit` and `retime` (mutually exclusive with `--target`).
+  Reports gain `target_duration`, `result_total_s` and `length_err_pct` in this mode only.
+- `target_sps` may be `None` when `target_duration` is given.
+
+### Known issues
+- With `--target-duration 0` (or negative) the `error:` line is followed by the mock-engine banner; exit code is still 2.
+- Some length-mode tests assert loosely and are to be tightened.
+
+### Unchanged
+- Without the new option, output, reports and cache keys are identical to 0.1.1.
+
 ## [0.1.1] - 2026-11-10
 
 ### Changed

@@ -1,6 +1,6 @@
 # tts-pace
 
-> **English summary** — A small Python library and CLI that measures the speaking rate of speech audio (syllables per second of *pure speech*, silences excluded) and fits a TTS engine's output to a target pace: first with the engine's own speed knob, then with a bounded, pitch-preserving tempo change. One runtime dependency (numpy), no API key, and a practice (mock) engine so you can try everything offline. Install: `uv add git+https://github.com/LeeGyeongPil/tts-pace`.
+> **English summary** — A small Python library and CLI that measures the speaking rate of speech audio (syllables per second of *pure speech*, silences excluded) and fits a TTS engine's output to a target pace: first with the engine's own speed knob, then with a bounded, pitch-preserving tempo change. You can also give a target total length in seconds (`--target-duration`) instead of a pace. One runtime dependency (numpy), no API key, and a practice (mock) engine so you can try everything offline. Install: `uv add git+https://github.com/LeeGyeongPil/tts-pace`.
 
 TTS 음성이 "초당 몇 음절" 속도로 말하는지 재고, 목표 속도에 맞춰 주는 파이썬 라이브러리 겸 명령줄 도구입니다. 영상 더빙·내레이션·낭독처럼 "이 문장은 4초 안에 끝나야 한다" 같은 요구가 있을 때 씁니다.
 
@@ -163,6 +163,29 @@ wrote     ko.wav
 
 뜻: 노브를 0.74배로 줬는데 속도는 그만큼 줄지 않았습니다(`knob_response_weak`). 템포 변환도 0.85배 하한에 걸렸습니다(`tempo_clamped`). 이럴 때 도구는 억지로 늘리지 않고, 목표에 가장 가까운 결과와 경고를 돌려줍니다. 권고대로 문장 길이나 목표를 조정해야 합니다.
 
+속도 대신 "쉼까지 포함해 전체 몇 초"로 목표를 줄 수도 있습니다. `--target`과 `--target-duration`은 함께 쓸 수 없고, 둘 중 하나는 꼭 줘야 합니다(어기면 종료 코드 2).
+
+```bash
+uv run tts-pace fit --engine mock --text "Today we learn how to match the rate." \
+  --target-duration 4 -o o.wav --no-cache
+```
+
+```text
+warning: tempo_clamped - The tempo change hit its limit, so the target was not reached. Shorten or lengthen the text, or choose an engine setting closer to the target pace.
+[mock] 연습용 목(mock) 엔진 — 실제 TTS 아님 (practice engine, not a real TTS)
+base      4.60 sps
+resynth       speed x0.714  tempo x1.000  -> 3.77 sps  err 14.60%
+resynth+tempo speed x0.714  tempo x0.850  -> 3.22 sps  err 2.15%
+best      resynth+tempo: 3.22 sps (target 3.2864, err 2.15%)
+length    3.85s (target 4.00s, err 3.85%)
+cache     miss
+wrote     o.wav
+```
+
+뜻: 목표 4.00초에 3.85초로 멈췄습니다. 템포가 0.85배 하한에 걸려서(`tempo_clamped`) `length` 줄이 남은 차이를 알려 줍니다. `length` 줄은 `--target-duration`을 쓸 때만 나옵니다.
+
+`best` 줄의 `target 3.2864`는 목표 길이 4초를 이 문장의 쉼 제외 말속도로 환산한 목표 sps입니다(그래서 다른 줄과 소수점 자릿수가 다릅니다).
+
 캐시 기본값은 CLI와 라이브러리가 다릅니다. CLI는 기본으로 `~/.cache/tts-pace`에 캐시하고, 라이브러리 `fit()`은 `cache_dir`를 주지 않으면(환경 변수 `TTS_PACE_CACHE_DIR`도 없으면) 캐시하지 않습니다.
 
 같은 명령에서 `--no-cache` 대신 `--cache-dir "$HOME/.cache/tts-pace"`(기본 캐시 위치는 `~/.cache/tts-pace`, `TTS_PACE_CACHE_DIR`로 바꿈)를 쓰면 두 번째 실행부터 `cache     hit`이 나오고 합성을 건너뜁니다.
@@ -171,6 +194,21 @@ wrote     ko.wav
 
 ```bash
 uv run tts-pace retime tts-pace-demo/en_far_base.wav --text-file tts-pace-demo/en.txt --target 4.2 -o slower.wav
+```
+
+전체 길이로 맞추려면 `--target 4.2` 대신 `--target-duration 9`를 씁니다. 이 파일은 원래 약 8초라서 느리게(길게) 늘리는 방향입니다.
+
+```bash
+uv run tts-pace retime tts-pace-demo/en_far_base.wav --text-file tts-pace-demo/en.txt --target-duration 9 -o slower.wav
+```
+
+```text
+base      4.61 sps
+tempo-only    speed x1.000  tempo x0.889  -> 4.10 sps  err 0.01%
+best      tempo-only: 4.10 sps (target 4.09641, err 0.01%)
+length    8.97s (target 9.00s, err 0.30%)
+cache     miss
+wrote     slower.wav
 ```
 
 엔진 없이 파일만 있을 때 쓰는 명령입니다. 목표가 너무 멀면(예: `--target 2.0`) 0.85배 하한에서 멈추고 `tempo_clamped` 경고를 냅니다. 이때도 종료 코드는 0이므로, 자동화에서는 경고 여부를 `--json` 출력이나 보고서로 확인하세요.
@@ -184,8 +222,8 @@ uv run tts-pace retime tts-pace-demo/en_far_base.wav --text-file tts-pace-demo/e
 | `count_syllables(text, lang="auto", normalize=None)` | 읽는 소리 기준 음절 수 | `lang`: `auto/ko/en/ja`(숫자·약어 읽기에만 영향), `normalize`: `{"2026": "twenty twenty six"}` | `SyllableCount` (`total`, `by_script`, `normalized_text`, `unsupported`) |
 | `measure(audio, text=None, syllables=None, *, silence_db=-60.0, min_silence=0.6, backend="auto", limiter=None)` | 쉼을 뺀 발화 시간과 말속도 측정 | `audio`: WAV 경로 또는 `AudioClip`; `text`와 `syllables`는 동시에 줄 수 없음 | `Measurement` (`total_s`, `silence_s`, `net_s`, `gaps`, `sps`) |
 | `retime(audio, factor, out=None, backend="auto", clamp=False, *, tempo_range=(0.85, 1.15), limiter=None)` | 피치를 유지한 채 속도 변경(1.1 = 10% 빠르게) | 범위 밖 `factor`는 `ValueError`, `clamp=True`면 경계값으로 자름 | `AudioClip` |
-| `fit(text, target_sps, engine, out=None, *, tolerance=0.10, tempo_range, cache_dir=None, lang="auto", normalize=None, limiter=None, keep_candidates=False, silence_db, min_silence, tempo_backend, measure_backend)` | 합성 → 측정 → 노브/템포 보정의 폐루프 | `engine`: `SpeedEngine`; `cache_dir`: 폴더, `True`(기본 위치), `False`(안 씀), `None`(기본값: 환경 변수 `TTS_PACE_CACHE_DIR`가 있을 때만 캐시); `limiter`: 동시 실행 제한용 `Limiter`; `silence_db`·`min_silence`: 쉼 판정 기준(`measure`와 같음); `tempo_backend`·`measure_backend`: 템포 변환·디코딩에 쓸 방식(기본 `auto`) | `FitResult` (`best`, `base`, `candidates`, `route`, `warnings`, `advice`, `cache_hit`, `save_report()`) |
-| `fit_audio(audio, text, target_sps, out=None, *, tolerance=0.10, tempo_range, silence_db, min_silence, tempo_backend, measure_backend, limiter=None, lang="auto", normalize=None)` | 엔진 없이 기존 녹음을 템포만으로 맞춤 | 같음 | `FitResult` |
+| `fit(text, target_sps, engine, out=None, *, target_duration=None, tolerance=0.10, tempo_range, cache_dir=None, lang="auto", normalize=None, limiter=None, keep_candidates=False, silence_db, min_silence, tempo_backend, measure_backend)` | 합성 → 측정 → 노브/템포 보정의 폐루프 | `engine`: `SpeedEngine`; `cache_dir`: 폴더, `True`(기본 위치), `False`(안 씀), `None`(기본값: 환경 변수 `TTS_PACE_CACHE_DIR`가 있을 때만 캐시); `target_duration`: 쉼 포함 전체 길이(초). `target_sps`와 둘 중 하나만 주고(길이 모드는 `target_sps=None`), 둘 다 주거나 둘 다 없거나 0 이하면 `ValueError`; `limiter`: 동시 실행 제한용 `Limiter`; `silence_db`·`min_silence`: 쉼 판정 기준(`measure`와 같음); `tempo_backend`·`measure_backend`: 템포 변환·디코딩에 쓸 방식(기본 `auto`) | `FitResult` (`best`, `base`, `candidates`, `route`, `warnings`, `advice`, `cache_hit`, `save_report()`) |
+| `fit_audio(audio, text, target_sps, out=None, *, target_duration=None, tolerance=0.10, tempo_range, silence_db, min_silence, tempo_backend, measure_backend, limiter=None, lang="auto", normalize=None)` | 엔진 없이 기존 녹음을 템포만으로 맞춤 | 같음 | `FitResult` |
 | `MockEngine(preset="en")` | 연습용 목 엔진(`"en"`/`"ko"`, `base_sps`, `elasticity`, `silent_floor`, `jitter`, `seed` 조정 가능) | | 엔진 |
 | `CallableEngine(fn, *, speed_range=(0.5, 2.0), deterministic=False, cache_id=None, name="callable", has_speed_knob=True)` | 파이썬 함수 하나를 엔진으로 포장 | `fn(text, speed)`는 `AudioClip`, WAV 경로, `(samples, sample_rate)` 중 하나를 반환 | 엔진 |
 | `SayEngine(voice=None, *, base_wpm=175, speed_range=(0.86, 1.6))` | macOS `say` 호출 | macOS 전용 | 엔진 |
@@ -262,7 +300,7 @@ r = fit("오늘은 속도를 맞춥니다.", target_sps=4.5, engine=SayEngine("Y
 
 ## 언제 쓰나
 
-- **tts-pace가 맞는 때**: 더빙·내레이션처럼 목표 속도를 "쉼을 뺀 음절/초"로 맞춰야 할 때(목표 길이를 직접 받지는 않습니다), 또는 이미 있는 녹음의 속도를 재고 템포(0.85~1.15배)만 조금 맞출 때. 설치는 numpy 하나면 됩니다.
+- **tts-pace가 맞는 때**: 더빙·내레이션처럼 목표 속도를 "쉼을 뺀 음절/초"로 맞춰야 할 때(목표 전체 길이는 `--target-duration`으로 줄 수 있습니다), 또는 이미 있는 녹음의 속도를 재고 템포(0.85~1.15배)만 조금 맞출 때. 설치는 numpy 하나면 됩니다.
 - **다른 도구가 나은 때**: 고정 배율로 빠르게만 바꾸면 된다면 TTS 엔진 자체의 속도 옵션이나 [ffmpeg `atempo`](https://ffmpeg.org/ffmpeg-filters.html#atempo)로 충분합니다. 음성 합성 자체가 필요하면 [Piper](https://github.com/OHF-Voice/piper1-gpl) 같은 TTS 엔진을 쓰세요.
 - tts-pace는 음성을 직접 합성하지 않는 측정·보정 계층입니다.
 
@@ -284,6 +322,8 @@ r = fit("오늘은 속도를 맞춥니다.", target_sps=4.5, engine=SayEngine("Y
 
 - 영어 음절은 규칙 기반 추정입니다(CMUdict 단어 1994개 표본에서 단어 단위 일치율 89.6%). 한국어는 글자 블록, 일본어는 모라 단위로 셉니다.
 - 템포 변환은 0.85~1.15배로 제한됩니다. 그 밖의 차이는 노브나 문장 길이로 풀어야 합니다.
+- `--target-duration`의 길이는 쉼을 포함한 전체 길이이고, 필요한 템포가 0.85~1.15배 안일 때만 정확히 맞습니다. 그 밖이면 경고와 함께 가까운 곳에서 멈춥니다.
+- 알려진 한계(0.2.0): `--target-duration`에 0 이하 값을 주면 `error:` 줄 뒤에 목 엔진 안내 줄이 함께 찍힙니다(종료 코드는 2로 정상). 길이 모드의 일부 테스트는 값 단위 검증이 약해 이후 보강할 예정입니다.
 - 목 엔진은 측정·보정 로직을 연습하기 위한 것이며 실제 음성의 품질과 속도 특성을 대표하지 않습니다.
 
 ## 버전·호환성
@@ -296,7 +336,7 @@ r = fit("오늘은 속도를 맞춥니다.", target_sps=4.5, engine=SayEngine("Y
 | 증상 | 원인 | 해결 |
 |---|---|---|
 | `knob_response_weak` 경고 | 엔진의 속도 노브가 하한·상한에서 멈추거나 비선형 | 다른 목소리·엔진 설정을 쓰거나 문장을 고칩니다 |
-| `tempo_clamped` 경고 | 목표까지 필요한 템포가 0.85~1.15배 밖 | 문장 길이나 목표 속도를 조정합니다 |
+| `tempo_clamped` 경고 | 목표(속도 또는 `--target-duration` 길이)까지 필요한 템포가 0.85~1.15배 밖 | 문장 길이나 목표 속도·길이를 조정합니다 |
 | `No countable syllables found` 오류 | 기호만 있거나 지원하지 않는 문자만 있어 셀 글자가 없음 | `normalize={"2026": "twenty twenty six"}`로 읽는 소리를 알려 줍니다 |
 | `SayEngine only works on macOS` | `say`는 macOS 전용 | `CallableEngine`이나 `PiperEngine`을 씁니다 |
 | `PiperEngine needs a voice .onnx file` | 음성 파일을 지정하지 않음 | `voice=...` 또는 `TTS_PACE_PIPER_VOICE`를 설정합니다 |
@@ -305,7 +345,7 @@ r = fit("오늘은 속도를 맞춥니다.", target_sps=4.5, engine=SayEngine("Y
 
 ```bash
 uv sync
-uv run pytest -q   # 70 passed, 2 deselected (실제 엔진이 필요한 테스트는 기본에서 제외)
+uv run pytest -q   # 91 passed, 2 deselected (실제 엔진이 필요한 테스트는 기본에서 제외)
 ```
 
 ## 더 알아보기
