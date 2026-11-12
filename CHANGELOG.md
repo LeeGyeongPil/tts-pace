@@ -4,6 +4,28 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - 2026-11-13
+
+### Added
+- Screen language for the command line: English and Korean. Choose it with `--lang en|ko` placed
+  before the command (`tts-pace --lang ko fit ...`), else the `TTS_PACE_LANG` environment variable,
+  else `LC_ALL` / `LC_MESSAGES` / `LANG`. A value starting with `ko` means Korean; anything else means English.
+- Help, usage and argparse error lines, result labels, the demo table, warning advice, error messages and
+  the practice-mode notice are shown in the chosen language. The demo notice is now one line in that language.
+- Errors can carry an optional `code` and `params` (`TtsPaceError`) and `CodedValueError` (a `ValueError`) so
+  the CLI can translate them.
+- Text tables are aligned by display width, so Korean columns line up.
+
+### Unchanged
+- `--lang` after `count` (text language) and after `fit` (mock engine preset) keeps its meaning.
+- `--json` output, `report.json` (including the English advice sentences), exit codes (2 on errors), the
+  public API and the exception messages (`str(exc)` is still English) are identical to 0.3.0.
+- For scripts, read `--json` rather than the human-readable text: its wording depends on the screen language.
+
+### Known issues
+- System messages quoted inside errors (for example the operating system's "No such file" text) stay in the
+  system language, and Python's own `UnsupportedCharsWarning` text is English.
+
 ## [0.3.0] - 2026-11-11
 
 ### Added
