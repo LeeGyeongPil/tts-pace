@@ -52,5 +52,6 @@ class CallableEngine:
             return AudioClip(np.asarray(result[0], dtype=np.float32), int(result[1]))
         raise EngineError(
             "The function given to CallableEngine must return an AudioClip, a WAV path or "
-            f"(samples, sample_rate); it returned {type(result).__name__}."
+            f"(samples, sample_rate); it returned {type(result).__name__}.",
+            code="callable_bad_return", params={"type": type(result).__name__},
         )

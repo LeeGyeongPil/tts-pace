@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 
 from .audio import AudioClip
-from .errors import EngineError
+from .errors import CodedValueError, EngineError
 from .runtime import DEFAULT_LIMITER, Limiter, find_ffmpeg, run_command, run_dir
 
 DEFAULT_TEMPO_RANGE = (0.85, 1.15)
@@ -70,7 +70,8 @@ def wsola(x: np.ndarray, sample_rate: int, factor: float) -> np.ndarray:
 def _atempo(clip: AudioClip, factor: float) -> AudioClip:
     ffmpeg = find_ffmpeg()
     if ffmpeg is None:
-        raise EngineError("backend='ffmpeg' needs ffmpeg. Install it, set TTS_PACE_FFMPEG, or use backend='numpy'.")
+        raise EngineError("backend='ffmpeg' needs ffmpeg. Install it, set TTS_PACE_FFMPEG, or use backend='numpy'.",
+                          code="ffmpeg_backend_missing")
     with run_dir() as tmp:
         src = clip.to_wav(tmp / "in.wav")
         dst = tmp / "out.wav"
@@ -107,13 +108,15 @@ def retime(
         raise ValueError(f"factor must be a positive number, got {factor!r}")
     lo, hi = tempo_range
     if not (0 < lo <= 1 <= hi):
-        raise ValueError(f"tempo_range must satisfy 0 < low <= 1 <= high, got {tempo_range!r}")
+        raise CodedValueError(f"tempo_range must satisfy 0 < low <= 1 <= high, got {tempo_range!r}",
+                              code="tempo_range_bad", params={"value": tempo_range})
     applied, clamped = clamp_factor(factor, tempo_range)
     if clamped and not clamp:
-        raise ValueError(
+        raise CodedValueError(
             f"factor {factor} is outside the allowed tempo range {lo}-{hi}. Large changes sound "
             "artificial: change the text or the engine speed instead, or pass clamp=True to use "
-            f"{applied}."
+            f"{applied}.",
+            code="tempo_factor_range", params={"factor": factor, "lo": lo, "hi": hi, "applied": applied},
         )
     clip = audio if isinstance(audio, AudioClip) else AudioClip.from_wav(audio)
     used = resolve_backend(backend)

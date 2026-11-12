@@ -11,7 +11,7 @@ import numpy as np
 
 from .audio import AudioClip
 from .count import count_syllables
-from .errors import MeasurementError
+from .errors import CodedValueError, MeasurementError
 from .runtime import Limiter, DEFAULT_LIMITER, find_ffmpeg, run_command, run_dir
 
 FRAME_S = 0.005  # numpy backend looks at 5 ms frames; a frame is quiet if its peak is below the threshold
@@ -81,7 +81,8 @@ def _silences_ffmpeg(clip: AudioClip, silence_db: float, min_silence: float) -> 
     ffmpeg = find_ffmpeg()
     if ffmpeg is None:
         raise MeasurementError(
-            "backend='ffmpeg' needs ffmpeg. Install it, set TTS_PACE_FFMPEG, or use backend='numpy'."
+            "backend='ffmpeg' needs ffmpeg. Install it, set TTS_PACE_FFMPEG, or use backend='numpy'.",
+            code="ffmpeg_backend_missing",
         )
     with run_dir() as tmp:
         wav = clip.to_wav(tmp / "in.wav")
@@ -120,13 +121,14 @@ def measure(
     do not change depending on what is installed).
     """
     if backend not in ("auto", "numpy", "ffmpeg"):
-        raise ValueError(f"backend must be 'auto', 'numpy' or 'ffmpeg', got {backend!r}")
+        raise CodedValueError(f"backend must be 'auto', 'numpy' or 'ffmpeg', got {backend!r}",
+                              code="backend_bad", params={"value": backend})
     if text is not None and syllables is not None:
-        raise ValueError("Give either text or syllables, not both.")
+        raise CodedValueError("Give either text or syllables, not both.", code="text_and_syllables")
     if min_silence <= 0:
-        raise ValueError("min_silence must be > 0 seconds")
+        raise CodedValueError("min_silence must be > 0 seconds", code="min_silence_bad")
     if silence_db >= 0:
-        raise ValueError("silence_db must be negative (dBFS), e.g. -60")
+        raise CodedValueError("silence_db must be negative (dBFS), e.g. -60", code="silence_db_bad")
     clip = audio if isinstance(audio, AudioClip) else AudioClip.from_wav(audio)
     if text is not None:
         syllables = count_syllables(text).total
@@ -143,7 +145,8 @@ def measure(
         raise MeasurementError(
             "The clip has no speech: everything is silence at the chosen threshold "
             f"({silence_db} dB, min {min_silence}s). Check the file, or lower silence_db "
-            "(for example -50) if the recording has a noise floor."
+            "(for example -50) if the recording has a noise floor.",
+            code="silent_clip", params={"silence_db": silence_db, "min_silence": min_silence},
         )
     sps = None if syllables is None else syllables / net
     return Measurement(total, silence, net, len(runs), syllables, sps, silence_db, min_silence, used)

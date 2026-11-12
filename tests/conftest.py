@@ -8,6 +8,14 @@ import pytest
 SR = 22050
 
 
+@pytest.fixture(autouse=True)
+def _english_screen(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pin the screen language to English so the host's LANG/LC_ALL cannot change test output."""
+    for name in ("LC_ALL", "LC_MESSAGES", "LANG"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("TTS_PACE_LANG", "en")
+
+
 def burst(dur: float = 0.15, freq: float = 140.0) -> np.ndarray:
     n = int(round(dur * SR))
     t = np.arange(n) / SR

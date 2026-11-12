@@ -9,7 +9,7 @@ from pathlib import Path
 from subprocess import CompletedProcess
 
 from ..audio import AudioClip
-from ..errors import EngineError
+from ..errors import CodedValueError, EngineError
 from ..runtime import DEFAULT_TIMEOUT_S, run_command, run_dir
 from .base import EngineInfo
 from .say import BuiltCommand
@@ -36,9 +36,10 @@ class PiperEngine:
     ) -> None:
         voice = voice or os.environ.get("TTS_PACE_PIPER_VOICE")
         if not voice:
-            raise ValueError(
+            raise CodedValueError(
                 "PiperEngine needs a voice .onnx file: pass voice=... or set TTS_PACE_PIPER_VOICE. "
-                "Download one with: python -m piper.download_voices en_US-lessac-medium"
+                "Download one with: python -m piper.download_voices en_US-lessac-medium",
+                code="piper_voice_needed",
             )
         self.voice = str(voice)
         self.command = list(command) if command else [sys.executable, "-m", "piper"]
@@ -65,5 +66,6 @@ class PiperEngine:
             built = self.build_command(speed, out)
             self._runner(built.argv, timeout=self.timeout, input_text=text)
             if not out.exists():
-                raise EngineError("Piper finished but wrote no audio file. Check the voice path and the piper install.")
+                raise EngineError("Piper finished but wrote no audio file. Check the voice path and the piper install.",
+                                  code="piper_no_output")
             return AudioClip.from_wav(out)

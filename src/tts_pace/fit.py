@@ -12,6 +12,7 @@ from pathlib import Path
 from .audio import AudioClip
 from .cache import ResultCache, audio_hash, default_cache_dir, make_key
 from .count import SyllableCount, count_syllables
+from .errors import CodedValueError
 from .engines.base import SpeedEngine
 from .measure import Measurement, measure
 from .runtime import DEFAULT_LIMITER, Limiter, run_dir
@@ -140,21 +141,25 @@ def _err(sps: float, target: float) -> float:
 def _validate(target_sps: float | None, target_duration: float | None, tolerance: float,
               tempo_range: tuple[float, float]) -> None:
     if target_sps is not None and target_duration is not None:
-        raise ValueError("give either target_sps or target_duration, not both")
+        raise CodedValueError("give either target_sps or target_duration, not both", code="target_both")
     if target_sps is None and target_duration is None:
-        raise ValueError("give target_sps (syllables/second) or target_duration (seconds)")
+        raise CodedValueError("give target_sps (syllables/second) or target_duration (seconds)", code="target_none")
     if target_duration is not None:
         # Rejects 0, negatives, NaN and inf (math.isfinite is False for the last two).
         if not (isinstance(target_duration, (int, float)) and math.isfinite(target_duration) and target_duration > 0):
-            raise ValueError("target_duration must be a positive number of seconds "
-                             f"(total length including pauses, e.g. 4.0), got {target_duration!r}")
+            raise CodedValueError("target_duration must be a positive number of seconds "
+                                  f"(total length including pauses, e.g. 4.0), got {target_duration!r}",
+                                  code="target_duration_bad", params={"value": target_duration})
     elif not target_sps > 0:  # type: ignore[operator]
-        raise ValueError(f"target_sps must be positive (syllables per second, e.g. 5.0), got {target_sps!r}")
+        raise CodedValueError(f"target_sps must be positive (syllables per second, e.g. 5.0), got {target_sps!r}",
+                              code="target_sps_bad", params={"value": target_sps})
     if not 0 <= tolerance < 1:
-        raise ValueError(f"tolerance must be in [0, 1), e.g. 0.10 for 10%, got {tolerance!r}")
+        raise CodedValueError(f"tolerance must be in [0, 1), e.g. 0.10 for 10%, got {tolerance!r}",
+                              code="tolerance_bad", params={"value": tolerance})
     lo, hi = tempo_range
     if not (0 < lo <= 1 <= hi):
-        raise ValueError(f"tempo_range must satisfy 0 < low <= 1 <= high, got {tempo_range!r}")
+        raise CodedValueError(f"tempo_range must satisfy 0 < low <= 1 <= high, got {tempo_range!r}",
+                              code="tempo_range_bad", params={"value": tempo_range})
 
 
 def _loop(

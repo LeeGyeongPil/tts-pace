@@ -7,8 +7,14 @@ from pathlib import Path
 
 from .engines.mock import MockEngine
 from .fit import FitResult, fit
+from .i18n import display_width, pad, t
 
-MOCK_BANNER = "[mock] 연습용 목(mock) 엔진 — 실제 TTS 아님 (practice engine, not a real TTS)"
+MOCK_BANNER = "[mock] 연습용 목(mock) 엔진 — 실제 TTS 아님 (practice engine, not a real TTS)"  # both languages, kept for compatibility
+
+
+def banner(lang: str = "en") -> str:
+    """The practice-mode notice in one language (the CLI prints this one)."""
+    return t("mock_banner", lang=lang)
 
 EN_TEXT = ("Today we learn how to match the speaking rate of a synthetic voice. "
            "It is a short lesson about pace and silence.")
@@ -49,12 +55,32 @@ def run_demo(out_dir: str | Path = "tts-pace-demo") -> tuple[list[tuple[str, Fit
     return results, report_path
 
 
-def format_table(results: list[tuple[str, FitResult]]) -> str:
-    head = f"{'case':<9} {'base sps':>8}  {'route':<14} {'final sps':>9} {'target':>6} {'err':>7}  warnings"
-    lines = [head, "-" * len(head)]
-    for name, r in results:
-        lines.append(
-            f"{name:<9} {r.base.measurement.sps:>8.2f}  {r.route:<14} {r.best.measurement.sps:>9.2f} "
-            f"{r.target_sps:>6.1f} {r.best.err_pct:>6.2f}%  {', '.join(r.warnings) or '-'}"
-        )
-    return "\n".join(lines)
+
+
+def format_table(results: list[tuple[str, FitResult]], lang: str = "en") -> str:
+    """Text table of the demo results.
+
+    Every column is as wide as its widest cell, measured in display columns (Hangul takes two),
+    so the table lines up in Korean as well as in English.
+    """
+    heads = [t(k, lang=lang) for k in
+             ("col_case", "col_base_sps", "col_route", "col_final_sps", "col_target", "col_err", "col_warnings")]
+    body = [
+        [name, f"{r.base.measurement.sps:.2f}", t(f"kind_{r.route}", lang=lang), f"{r.best.measurement.sps:.2f}",
+         f"{r.target_sps:.1f}", f"{r.best.err_pct:.2f}%", ", ".join(r.warnings) or "-"]
+        for name, r in results
+    ]
+    minimum = [9, 8, 14, 9, 6, 7, 0]  # the English layout of earlier versions
+    widths = [max([minimum[i], display_width(heads[i])] + [display_width(row[i]) for row in body])
+              for i in range(7)]
+    align = ["<", ">", "<", ">", ">", ">", "<"]
+    gaps = [" ", "  ", " ", " ", " ", "  "]  # text between neighbouring columns
+
+    def line(cells: list[str]) -> str:
+        out = pad(cells[0], widths[0], align[0])
+        for i in range(1, 7):
+            out += gaps[i - 1] + (cells[i] if i == 6 else pad(cells[i], widths[i], align[i]))
+        return out
+
+    head = line(heads)
+    return "\n".join([head, "-" * display_width(head), *(line(row) for row in body)])

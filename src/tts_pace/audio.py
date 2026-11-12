@@ -36,7 +36,7 @@ class AudioClip:
         """Read a WAV (8/16/24/32-bit PCM). Other formats are decoded with ffmpeg when available."""
         p = Path(path)
         if not p.exists():
-            raise AudioFormatError(f"Audio file not found: {p}")
+            raise AudioFormatError(f"Audio file not found: {p}", code="audio_not_found", params={"path": str(p)})
         try:
             return _read_pcm_wav(p)
         except (wave.Error, EOFError):
@@ -61,7 +61,7 @@ def _read_pcm_wav(p: Path) -> AudioClip:
         ch, width, rate, n = w.getnchannels(), w.getsampwidth(), w.getframerate(), w.getnframes()
         raw = w.readframes(n)
     if n == 0:
-        raise AudioFormatError(f"{p} has no audio frames.")
+        raise AudioFormatError(f"{p} has no audio frames.", code="audio_no_frames", params={"path": str(p)})
     if width == 1:
         x = (np.frombuffer(raw, dtype=np.uint8).astype(np.float32) - 128.0) / 128.0
     elif width == 2:
@@ -74,7 +74,8 @@ def _read_pcm_wav(p: Path) -> AudioClip:
     elif width == 4:
         x = np.frombuffer(raw, dtype="<i4").astype(np.float32) / float(1 << 31)
     else:
-        raise AudioFormatError(f"Unsupported sample width {width} bytes in {p}.")
+        raise AudioFormatError(f"Unsupported sample width {width} bytes in {p}.",
+                               code="audio_bad_width", params={"width": width, "path": str(p)})
     if ch > 1:
         x = x.reshape(-1, ch).mean(axis=1)  # mix down to mono
     return AudioClip(x.astype(np.float32), rate)
@@ -85,12 +86,16 @@ def _decode_with_ffmpeg(p: Path) -> AudioClip:
     if ffmpeg is None:
         raise AudioFormatError(
             f"{p} is not a PCM WAV file and ffmpeg was not found to decode it. "
-            "Convert it to 16-bit WAV, or install ffmpeg (or set TTS_PACE_FFMPEG)."
+            "Convert it to 16-bit WAV, or install ffmpeg (or set TTS_PACE_FFMPEG).",
+            code="audio_no_ffmpeg", params={"path": str(p)},
         )
     with run_dir() as tmp:
         out = tmp / "decoded.wav"
         try:
             run_command([ffmpeg, "-v", "error", "-y", "-i", str(p), "-ac", "1", "-c:a", "pcm_s16le", str(out)])
         except EngineError as exc:
-            raise AudioFormatError(f"{p} is not an audio file ffmpeg can read; convert it to 16-bit WAV. (ffmpeg said: {exc})") from exc
+            raise AudioFormatError(
+                f"{p} is not an audio file ffmpeg can read; convert it to 16-bit WAV. (ffmpeg said: {exc})",
+                code="audio_ffmpeg_unreadable", params={"path": str(p), "reason": str(exc)},
+            ) from exc
         return _read_pcm_wav(out)

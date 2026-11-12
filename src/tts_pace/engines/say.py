@@ -60,7 +60,8 @@ class SayEngine:
 
     def synthesize(self, text: str, speed: float) -> AudioClip:
         if sys.platform != "darwin" and self._runner is run_command:
-            raise EngineError("SayEngine only works on macOS. Use CallableEngine for other platforms.")
+            raise EngineError("SayEngine only works on macOS. Use CallableEngine for other platforms.",
+                              code="say_macos_only")
         with run_dir() as tmp:
             text_file = tmp / "text.txt"
             text_file.write_text(text, encoding="utf-8")
@@ -72,5 +73,6 @@ class SayEngine:
             except AudioFormatError as exc:
                 raise EngineError(
                     f"say wrote no audio ({exc}). Check the voice name (`say -v '?'`) and that the "
-                    "process is allowed to use macOS speech synthesis (some sandboxes block it)."
+                    "process is allowed to use macOS speech synthesis (some sandboxes block it).",
+                    code="say_no_audio", params={"reason": str(exc)},
                 ) from exc

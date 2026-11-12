@@ -42,7 +42,8 @@ class Limiter:
                 if self._waiting >= self.max_waiting:
                     raise BusyError(
                         f"All {self.max_concurrent} slot(s) are busy and {self._waiting} request(s) "
-                        "are already waiting. Retry later or raise Limiter(max_waiting=...)."
+                        "are already waiting. Retry later or raise Limiter(max_waiting=...).",
+                        code="busy", params={"slots": self.max_concurrent, "waiting": self._waiting},
                     )
                 self._waiting += 1
                 try:
@@ -100,13 +101,18 @@ def run_command(
     except subprocess.TimeoutExpired as exc:
         raise EngineError(
             f"{name} did not finish within {timeout:g}s. Real engines can be slow on a busy "
-            "machine: raise the timeout or try a shorter text."
+            "machine: raise the timeout or try a shorter text.",
+            code="engine_timeout", params={"name": name, "timeout": timeout},
         ) from exc
     except FileNotFoundError as exc:
-        raise EngineError(f"{name} was not found. Install it or give its full path.") from exc
+        raise EngineError(f"{name} was not found. Install it or give its full path.",
+                          code="engine_not_found", params={"name": name}) from exc
     except OSError as exc:
-        raise EngineError(f"{name} could not be started: {exc}") from exc
+        raise EngineError(f"{name} could not be started: {exc}",
+                          code="engine_start_failed", params={"name": name, "reason": str(exc)}) from exc
     if proc.returncode != 0:
         tail = (proc.stderr or "").strip().splitlines()[-3:]
-        raise EngineError(f"{name} exited with code {proc.returncode}: {' | '.join(tail)}")
+        raise EngineError(f"{name} exited with code {proc.returncode}: {' | '.join(tail)}",
+                          code="engine_exit",
+                          params={"name": name, "returncode": proc.returncode, "tail": " | ".join(tail)})
     return proc

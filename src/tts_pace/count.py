@@ -86,7 +86,9 @@ def count_syllables(
             "No countable syllables found in the text"
             + (f" (unsupported: {', '.join(unsupported)})" if unsupported else "")
             + ". Provide Hangul, kana or Latin letters, or map the text to a spoken form "
-            "with normalize={...}."
+            "with normalize={...}.",
+            code="unsupported_text" if not unsupported else "unsupported_text_detail",
+            params={"unsupported": ", ".join(unsupported)},
         )
     if unsupported:
         warnings.warn(
