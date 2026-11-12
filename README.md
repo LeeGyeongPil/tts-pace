@@ -90,7 +90,7 @@ uv run tts-pace demo
 ```
 
 ```text
-[mock] 연습용 목(mock) 엔진 — 실제 TTS 아님 (practice engine, not a real TTS)
+[mock] practice (mock) engine - not a real TTS
 case      base sps  route          final sps target     err  warnings
 ---------------------------------------------------------------------
 en far        4.61  resynth+tempo       4.00    4.0   0.09%  -
@@ -100,8 +100,6 @@ ko floor      5.40  resynth+tempo       4.16    4.0   3.95%  knob_response_weak,
 
 wrote tts-pace-demo/ (WAV files + report.json: tts-pace-demo/report.json)
 ```
-
-(The first line's Korean part means "practice mock engine, not a real TTS".)
 
 What it means: `base sps` is the speed of the first synthesis, `route` is the method used to fit, and `err` is the difference from the target. `en far` had a distant target so it used the knob as well, while `en near` and `ko near` were close and used the tempo only. `ko floor` is a case where this fake Korean engine is built so that it cannot get slower than its speed floor, so 3.95% error remains and warnings are attached. The generated WAV files and `report.json` are saved in `tts-pace-demo/`.
 
@@ -152,7 +150,7 @@ uv run tts-pace fit --engine mock --lang ko \
 ```text
 warning: knob_response_weak - The engine speed knob changed the pace much less than asked (it may stop at a floor or scale non-linearly). Try another voice or engine setting, or edit the text.
 warning: tempo_clamped - The tempo change hit its limit, so the target was not reached. Shorten or lengthen the text, or choose an engine setting closer to the target pace.
-[mock] 연습용 목(mock) 엔진 — 실제 TTS 아님 (practice engine, not a real TTS)
+[mock] practice (mock) engine - not a real TTS
 base      5.40 sps
 resynth       speed x0.740  tempo x1.000  -> 4.89 sps  err 22.23%
 resynth+tempo speed x0.740  tempo x0.850  -> 4.16 sps  err 4.08%
@@ -178,7 +176,7 @@ uv run tts-pace fit --engine mock --text "Today we learn how to match the rate."
 
 ```text
 warning: tempo_clamped - The tempo change hit its limit, so the target was not reached. Shorten or lengthen the text, or choose an engine setting closer to the target pace.
-[mock] 연습용 목(mock) 엔진 — 실제 TTS 아님 (practice engine, not a real TTS)
+[mock] practice (mock) engine - not a real TTS
 base      4.60 sps
 resynth       speed x0.714  tempo x1.000  -> 3.77 sps  err 14.60%
 resynth+tempo speed x0.714  tempo x0.850  -> 3.22 sps  err 2.15%
@@ -232,6 +230,54 @@ wrote     slower.wav
 
 This is the command to use when you have only a file and no engine. If the target is too far (for example `--target 2.0`), it stops at the 0.85x floor and raises a `tempo_clamped` warning. The exit code is still 0 in that case, so in automation check for warnings in the `warnings` field of the `--json` output (both `retime --json` and `fit --json`) or in the report.
 
+### 6. Choosing the screen language (since 0.4.0)
+
+The text meant for people (help, result labels, the demo table, warnings, errors) comes in English or Korean. `--json` output and `report.json` do not change with the language, so scripts should read those instead of the human-readable text.
+
+The language is chosen in this order; the first one that is set wins:
+
+1. `--lang en|ko` placed **before** the command: `tts-pace --lang ko count ...`
+2. The `TTS_PACE_LANG` environment variable (`en` or `ko`)
+3. `LC_ALL`, then `LC_MESSAGES`, then `LANG`: a value starting with `ko` (such as `ko_KR.UTF-8`) means Korean
+4. Otherwise English
+
+```bash
+uv run tts-pace --lang ko count "hello"
+TTS_PACE_LANG=ko uv run tts-pace count "hello"
+uv run tts-pace --lang en count "hello"
+```
+
+```text
+발음 형태   : hello
+음절 수     : 2  {'ko': 0, 'en': 2, 'ja': 0}
+```
+
+The first two commands print the Korean text above; the third prints the English one (`spoken form` / `syllables`). The Korean README shows the demo table with Korean headers (Korean characters are two columns wide, and the columns still line up).
+
+
+**Do not confuse it with the `--lang` placed after a command.** `count --lang auto|ko|en|ja` is the language of the *text being counted*, and `fit --lang ko|en` picks the mock engine's preset. Both keep their old meaning and can be combined with the screen language:
+
+```bash
+uv run tts-pace --lang ko count --lang en "hello"
+```
+
+```text
+발음 형태   : hello
+음절 수     : 2  {'ko': 0, 'en': 2, 'ja': 0}
+```
+
+An error in Korean, with exit code 2 as before:
+
+```bash
+uv run tts-pace --lang ko fit --engine mock --text hi -o x.wav
+```
+
+```text
+tts-pace fit: 오류: 다음 인자 중 하나가 필요합니다: --target --target-duration
+```
+
+(Only the last line is shown; the usage lines come before it. It means "one of these arguments is required: --target --target-duration".)
+
 ## API
 
 These are the public names exported by `tts_pace`. Do not use module-internal functions that are not listed here.
@@ -254,7 +300,7 @@ These are the public names exported by `tts_pace`. Do not use module-internal fu
 
 Warnings returned by `fit()`: `knob_response_weak` (the knob does not respond as expected), `knob_clamped` (the requested speed was outside the engine's range and was cut), `tempo_clamped` (the tempo limit was hit), `unsupported_chars` (there were characters that could not be counted).
 
-Command line: `tts-pace {demo,count,measure,retime,fit}`. See each command's options with `uv run tts-pace <command> --help`.
+Command line: `tts-pace [--lang en|ko] {demo,count,measure,retime,fit}`. See each command's options with `uv run tts-pace <command> --help`; the screen language is described in [step 6](#6-choosing-the-screen-language-since-040).
 
 ## Usage examples
 
@@ -344,7 +390,7 @@ Results of fitting with real engines (error against the target): English Piper a
 - English syllables are a rule-based estimate (89.6% word-level agreement on a sample of 1,994 CMUdict words). Korean is counted by character block and Japanese by mora.
 - The tempo change is limited to 0.85-1.15x. Differences beyond that must be solved with the knob or the sentence length.
 - The length for `--target-duration` is the total length including pauses, and it is hit exactly only when the required tempo is within 0.85-1.15x. Otherwise it stops nearby with a warning.
-- Known limitations (as of 0.3.0): giving `--target-duration` a value of 0 or less prints the mock-engine notice line after the `error:` line (the exit code is still the correct 2). Some of the length-mode tests have weak value-unit checks and will be strengthened later. The `--json` tests do not yet cover the combinations of `--lang`, and `--target-duration` with `--cache-dir`. When `--json` hits an error (in mock mode), the first line of standard error is the `[mock]` notice and the `error:` line comes after it (standard output is empty and the exit code is 2).
+- Known limitations: giving `--target-duration` a value of 0 or less prints the mock-engine notice line after the `error:` line (the exit code is still the correct 2). Some of the length-mode tests have weak value-unit checks and will be strengthened later. The `--json` tests cover the screen language (the JSON is identical in both languages), but not the combination of `--target-duration` with `--cache-dir`. When `--json` hits an error (in mock mode), the first line of standard error is the `[mock]` notice and the `error:` line comes after it (standard output is empty and the exit code is 2).
 - The mock engine is for practicing the measurement and correction logic and does not represent the quality or speed characteristics of real speech.
 
 ## Versions and compatibility
@@ -361,12 +407,13 @@ Results of fitting with real engines (error against the target): English Piper a
 | `No countable syllables found` error | There are only symbols or only unsupported characters, so nothing can be counted | Tell it how the text is read with `normalize={"2026": "twenty twenty six"}` |
 | `SayEngine only works on macOS` | `say` is macOS only | Use `CallableEngine` or `PiperEngine` |
 | `PiperEngine needs a voice .onnx file` | No voice file was specified | Set `voice=...` or `TTS_PACE_PIPER_VOICE` |
+| `--text-file ... is not valid UTF-8 text` error (exit code 2) | The text file is saved in another encoding | Re-save the file as UTF-8 and run again |
 
 ## Development and contributing
 
 ```bash
 uv sync
-uv run pytest -q   # 99 passed, 2 deselected (tests that need a real engine are excluded by default)
+uv run pytest -q   # 147 passed, 2 deselected (tests that need a real engine are excluded by default)
 ```
 
 ## Learn more

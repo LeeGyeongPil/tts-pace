@@ -6,7 +6,7 @@ TTS 음성이 "초당 몇 음절" 속도로 말하는지 재고, 목표 속도�
 
 비유하면 TTS의 속도 설정은 눈금 없는 수도꼭지입니다. 돌린 만큼 물이 나오는지 알 수 없습니다. tts-pace는 계량기를 달고, 눈금을 보면서 손으로 조금씩 다시 돌려 주는 도구입니다.
 
-![데모 실행 결과: 네 가지 경우의 목표 속도 맞춤 표](docs/images/01-demo.png)
+![데모 실행 결과: 네 가지 경우의 목표 속도 맞춤 표](docs/images/01-demo.ko.png)
 
 *`tts-pace demo` 실행 결과(연습용 목 엔진). 네 경우 중 셋은 오차 0.5% 이내이고, 마지막 줄은 한계에 걸려 경고가 나온 경우입니다.*
 
@@ -81,7 +81,7 @@ flowchart LR
 
 ## 단계별 따라 하기
 
-저장소를 받은 폴더에서 차례로 실행합니다(전부 키 없이, 목 엔진으로 0.2초 안팎).
+저장소를 받은 폴더에서 차례로 실행합니다(전부 키 없이, 목 엔진으로 0.2초 안팎). 아래 텍스트 출력은 기본(영어) 화면 기준이며 `LANG=ko_KR` 환경이면 한국어 라벨이 보입니다. 스크린샷은 한국어 화면입니다([6단계](#6-화면-언어-고르기-040부터)에서 바꾸는 법).
 
 ### 1. 데모 한 번에 돌려 보기
 
@@ -90,7 +90,7 @@ uv run tts-pace demo
 ```
 
 ```text
-[mock] 연습용 목(mock) 엔진 — 실제 TTS 아님 (practice engine, not a real TTS)
+[mock] practice (mock) engine - not a real TTS
 case      base sps  route          final sps target     err  warnings
 ---------------------------------------------------------------------
 en far        4.61  resynth+tempo       4.00    4.0   0.09%  -
@@ -114,7 +114,7 @@ spoken form : 이천이십육년 티티에스 속도를 맞춥니다
 syllables   : 17  {'ko': 17, 'en': 0, 'ja': 0}
 ```
 
-![count 실행 결과](docs/images/02-count.png)
+![count 실행 결과](docs/images/02-count.ko.png)
 
 *숫자와 약어가 읽는 소리로 바뀐 뒤 17음절로 세어집니다.*
 
@@ -131,7 +131,7 @@ total 8.00s  silence 1.71s (2 gaps)  speech 6.30s
 29 syllables -> 4.61 syllables/second of pure speech
 ```
 
-![measure 실행 결과](docs/images/03-measure.png)
+![measure 실행 결과](docs/images/03-measure.ko.png)
 
 *전체 8.00초 중 쉼 1.71초를 빼고 6.30초 동안 29음절을 말했으므로 4.61 sps입니다.*
 
@@ -148,7 +148,7 @@ uv run tts-pace fit --engine mock --lang ko \
 ```text
 warning: knob_response_weak - The engine speed knob changed the pace much less than asked (it may stop at a floor or scale non-linearly). Try another voice or engine setting, or edit the text.
 warning: tempo_clamped - The tempo change hit its limit, so the target was not reached. Shorten or lengthen the text, or choose an engine setting closer to the target pace.
-[mock] 연습용 목(mock) 엔진 — 실제 TTS 아님 (practice engine, not a real TTS)
+[mock] practice (mock) engine - not a real TTS
 base      5.40 sps
 resynth       speed x0.740  tempo x1.000  -> 4.89 sps  err 22.23%
 resynth+tempo speed x0.740  tempo x0.850  -> 4.16 sps  err 4.08%
@@ -157,7 +157,7 @@ cache     miss
 wrote     ko.wav
 ```
 
-![fit 실행 결과](docs/images/04-fit.png)
+![fit 실행 결과](docs/images/04-fit.ko.png)
 
 *5.40 sps에서 4.0 sps를 목표로 했을 때. 속도 노브를 0.74배로 낮춰도 4.89 sps까지만 내려가고, 템포를 한계(0.85배)까지 써도 4.16 sps에서 멈춥니다.*
 
@@ -172,7 +172,7 @@ uv run tts-pace fit --engine mock --text "Today we learn how to match the rate."
 
 ```text
 warning: tempo_clamped - The tempo change hit its limit, so the target was not reached. Shorten or lengthen the text, or choose an engine setting closer to the target pace.
-[mock] 연습용 목(mock) 엔진 — 실제 TTS 아님 (practice engine, not a real TTS)
+[mock] practice (mock) engine - not a real TTS
 base      4.60 sps
 resynth       speed x0.714  tempo x1.000  -> 3.77 sps  err 14.60%
 resynth+tempo speed x0.714  tempo x0.850  -> 3.22 sps  err 2.15%
@@ -226,6 +226,57 @@ wrote     slower.wav
 
 엔진 없이 파일만 있을 때 쓰는 명령입니다. 목표가 너무 멀면(예: `--target 2.0`) 0.85배 하한에서 멈추고 `tempo_clamped` 경고를 냅니다. 이때도 종료 코드는 0이므로, 자동화에서는 경고 여부를 `--json` 출력(`retime --json`, `fit --json` 모두)의 `warnings` 필드나 보고서로 확인하세요.
 
+### 6. 화면 언어 고르기 (0.4.0부터)
+
+사람이 읽는 문구(도움말, 결과 라벨, 데모 표, 경고, 오류)는 영어와 한국어로 나옵니다. `--json` 출력과 `report.json`은 언어에 따라 바뀌지 않으므로, 스크립트에서는 사람용 텍스트 대신 이쪽을 읽으십시오.
+
+언어는 아래 순서로 정하고, 먼저 설정된 것이 이깁니다.
+
+1. 명령 **앞에** 둔 `--lang en|ko`: `tts-pace --lang ko count ...`
+2. 환경 변수 `TTS_PACE_LANG` (`en` 또는 `ko`)
+3. `LC_ALL`, 그다음 `LC_MESSAGES`, 그다음 `LANG`: 값이 `ko`로 시작하면(`ko_KR.UTF-8` 등) 한국어
+4. 그 밖에는 영어
+
+```bash
+uv run tts-pace --lang ko count "hello"
+TTS_PACE_LANG=ko uv run tts-pace count "hello"
+uv run tts-pace --lang en count "hello"
+```
+
+```text
+발음 형태   : hello
+음절 수     : 2  {'ko': 0, 'en': 2, 'ja': 0}
+```
+
+앞의 두 명령은 위 한국어 문구를, 세 번째는 영어 문구(`spoken form` / `syllables`)를 출력합니다. 데모 표를 한국어로 보면 아래와 같습니다(한글은 두 칸 폭이며 열이 그대로 맞습니다).
+
+![tts-pace demo 한국어 화면](docs/images/01-demo.ko.png)
+
+*`tts-pace --lang ko demo`: 같은 표를 한국어 머리글과 경로 이름으로 보여 줍니다.*
+
+**명령 뒤에 오는 `--lang`과 헷갈리지 마십시오.** `count --lang auto|ko|en|ja`는 *세는 텍스트의 언어*이고, `fit --lang ko|en`은 목 엔진의 프리셋입니다. 둘 다 예전 의미 그대로이며 화면 언어와 함께 쓸 수 있습니다.
+
+```bash
+uv run tts-pace --lang ko count --lang en "hello"
+```
+
+```text
+발음 형태   : hello
+음절 수     : 2  {'ko': 0, 'en': 2, 'ja': 0}
+```
+
+한국어 오류는 이전처럼 종료 코드 2로 끝납니다.
+
+```bash
+uv run tts-pace --lang ko fit --engine mock --text hi -o x.wav
+```
+
+```text
+tts-pace fit: 오류: 다음 인자 중 하나가 필요합니다: --target --target-duration
+```
+
+(마지막 줄만 보였습니다. 앞에는 사용법 줄이 나옵니다.)
+
 ## API
 
 `tts_pace`가 내보내는 공개 이름입니다. 여기 없는 모듈 내부 함수는 쓰지 않습니다.
@@ -248,7 +299,7 @@ wrote     slower.wav
 
 `fit()`이 돌려주는 경고: `knob_response_weak`(노브가 기대만큼 안 듣는다), `knob_clamped`(요청 속도가 엔진 범위 밖이라 잘렸다), `tempo_clamped`(템포 한계에 걸렸다), `unsupported_chars`(셀 수 없는 글자가 있었다).
 
-명령줄: `tts-pace {demo,count,measure,retime,fit}`. 각 명령의 옵션은 `uv run tts-pace <명령> --help`로 봅니다.
+명령줄: `tts-pace [--lang en|ko] {demo,count,measure,retime,fit}`. 각 명령의 옵션은 `uv run tts-pace <명령> --help`로 봅니다. 화면 언어는 [6단계](#6-화면-언어-고르기-040부터)를 보십시오.
 
 ## 사용 예
 
@@ -336,7 +387,7 @@ r = fit("오늘은 속도를 맞춥니다.", target_sps=4.5, engine=SayEngine("Y
 - 영어 음절은 규칙 기반 추정입니다(CMUdict 단어 1994개 표본에서 단어 단위 일치율 89.6%). 한국어는 글자 블록, 일본어는 모라 단위로 셉니다.
 - 템포 변환은 0.85~1.15배로 제한됩니다. 그 밖의 차이는 노브나 문장 길이로 풀어야 합니다.
 - `--target-duration`의 길이는 쉼을 포함한 전체 길이이고, 필요한 템포가 0.85~1.15배 안일 때만 정확히 맞습니다. 그 밖이면 경고와 함께 가까운 곳에서 멈춥니다.
-- 알려진 한계(0.3.0 기준): `--target-duration`에 0 이하 값을 주면 `error:` 줄 뒤에 목 엔진 안내 줄이 함께 찍힙니다(종료 코드는 2로 정상). 길이 모드의 일부 테스트는 값 단위 검증이 약해 이후 보강할 예정입니다. `--json` 테스트에는 `--lang`, `--target-duration`+`--cache-dir` 조합이 아직 없습니다. `--json`에서 오류가 나면(목 모드) 표준오류 첫 줄은 `[mock]` 안내이고 `error:` 줄은 그다음에 옵니다(표준출력은 비어 있고 종료 코드는 2).
+- 알려진 한계: `--target-duration`에 0 이하 값을 주면 `error:` 줄 뒤에 목 엔진 안내 줄이 함께 찍힙니다(종료 코드는 2로 정상). 길이 모드의 일부 테스트는 값 단위 검증이 약해 이후 보강할 예정입니다. `--json` 테스트는 화면 언어(두 언어에서 JSON이 같음)를 다루지만 `--target-duration`+`--cache-dir` 조합은 아직 없습니다. `--json`에서 오류가 나면(목 모드) 표준오류 첫 줄은 `[mock]` 안내이고 `error:` 줄은 그다음에 옵니다(표준출력은 비어 있고 종료 코드는 2).
 - 목 엔진은 측정·보정 로직을 연습하기 위한 것이며 실제 음성의 품질과 속도 특성을 대표하지 않습니다.
 
 ## 버전·호환성
@@ -353,12 +404,13 @@ r = fit("오늘은 속도를 맞춥니다.", target_sps=4.5, engine=SayEngine("Y
 | `No countable syllables found` 오류 | 기호만 있거나 지원하지 않는 문자만 있어 셀 글자가 없음 | `normalize={"2026": "twenty twenty six"}`로 읽는 소리를 알려 줍니다 |
 | `SayEngine only works on macOS` | `say`는 macOS 전용 | `CallableEngine`이나 `PiperEngine`을 씁니다 |
 | `PiperEngine needs a voice .onnx file` | 음성 파일을 지정하지 않음 | `voice=...` 또는 `TTS_PACE_PIPER_VOICE`를 설정합니다 |
+| `--text-file ... UTF-8 텍스트가 아닙니다` 오류(종료 코드 2) | 텍스트 파일이 다른 인코딩으로 저장됨 | UTF-8로 다시 저장한 뒤 실행합니다 |
 
 ## 개발·기여
 
 ```bash
 uv sync
-uv run pytest -q   # 99 passed, 2 deselected (실제 엔진이 필요한 테스트는 기본에서 제외)
+uv run pytest -q   # 147 passed, 2 deselected (실제 엔진이 필요한 테스트는 기본에서 제외)
 ```
 
 ## 더 알아보기
